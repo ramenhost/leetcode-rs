@@ -1,0 +1,6 @@
+{
+  "name": "leetcode-rs",
+  "image": "mcr.microsoft.com/devcontainers/rust:latest",
+  "features": {
+  }
+}
