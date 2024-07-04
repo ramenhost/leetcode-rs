@@ -2,5 +2,14 @@
   "name": "leetcode-rs",
   "image": "mcr.microsoft.com/devcontainers/rust:latest",
   "features": {
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "GitHub.copilot",
+        "LeetCode.vscode-leetcode"
+      ]
+    }
   }
 }
