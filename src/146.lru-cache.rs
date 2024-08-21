@@ -73,24 +73,23 @@ use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     collections::HashMap,
-    fmt::Display,
     rc::Rc,
 };
 
 type Link<T> = Option<Rc<RefCell<Node<T>>>>;
 
-struct Node<T: Clone + Display> {
+struct Node<T: Copy> {
     value: T,
     next: Link<T>,
     prev: Link<T>,
 }
 
-struct DoublyLinkedList<T: Clone + Display> {
+struct DoublyLinkedList<T: Copy> {
     head: Link<T>,
     tail: Link<T>,
 }
 
-impl<T: Clone + Display> Node<T> {
+impl<T: Copy> Node<T> {
     fn new(value: T) -> Self {
         Node {
             value,
@@ -100,7 +99,7 @@ impl<T: Clone + Display> Node<T> {
     }
 }
 
-impl<T: Clone + Display> DoublyLinkedList<T> {
+impl<T: Copy> DoublyLinkedList<T> {
     fn new() -> Self {
         DoublyLinkedList {
             head: None,
@@ -110,15 +109,15 @@ impl<T: Clone + Display> DoublyLinkedList<T> {
 
     fn push_back(&mut self, value: T) -> Rc<RefCell<Node<T>>> {
         let node = Rc::new(RefCell::new(Node::new(value)));
-        if let Some(tail) = &self.tail.take() {
-            node.as_ref().borrow_mut().prev = Some(Rc::clone(&tail));
+        if let Some(tail) = self.tail.take() {
             tail.as_ref().borrow_mut().next = Some(Rc::clone(&node));
+            node.as_ref().borrow_mut().prev = Some(tail);
         }
-        self.tail = Some(node.clone());
+        self.tail = Some(Rc::clone(&node));
         if self.head.is_none() {
             self.head = Some(Rc::clone(&node));
         }
-        Rc::clone(&node)
+        node
     }
 
     fn pop_front(&mut self) -> Option<T> {
@@ -127,29 +126,35 @@ impl<T: Clone + Display> DoublyLinkedList<T> {
         if let Some(head) = self.head.as_ref() {
             head.as_ref().borrow_mut().prev = None;
         }
-        head.map(|h| h.as_ref().borrow().value.clone())
+        head.map(|h| h.as_ref().borrow().value)
     }
 
-    fn move_back(&mut self, node: Rc<RefCell<Node<T>>>) {
+    fn move_back(&mut self, node: &Rc<RefCell<Node<T>>>) {
         let mut node_mut = node.as_ref().borrow_mut();
+        let mut tail = None;
         if node_mut.next.is_none() {
             return;
         }
         if let Some(prev) = node_mut.prev.take() {
             let mut prev_mut = prev.as_ref().borrow_mut();
+            self.tail.as_ref().unwrap().as_ref().borrow_mut().next = prev_mut.next.take();
             prev_mut.next = node_mut.next.take();
-            if prev_mut.next.is_some() {
-                prev_mut.next.as_mut().unwrap().as_ref().borrow_mut().prev = Some(Rc::clone(&prev));
-            }
+            let mut next_mut = prev_mut.next.as_ref().unwrap().as_ref().borrow_mut();
+            tail = next_mut.prev.take();
+            next_mut.prev = Some(Rc::clone(&prev));
         } else if let Some(next) = node_mut.next.take() {
-            next.as_ref().borrow_mut().prev = None;
+            let mut next_mut = next.as_ref().borrow_mut();
+            let cur_node = next_mut.prev.take();
+            next_mut.prev = None;
+            drop(next_mut);
+            self.tail.as_ref().unwrap().as_ref().borrow_mut().next = cur_node;
+            tail = self.head.take();
             self.head = Some(next);
         }
         node_mut.next = None;
         node_mut.prev = self.tail.take();
-        node_mut.prev.as_ref().unwrap().as_ref().borrow_mut().next = Some(Rc::clone(&node));
         drop(node_mut);
-        self.tail = Some(node);
+        self.tail = tail;
     }
 }
 
@@ -174,7 +179,7 @@ impl LRUCache {
 
     fn get(&mut self, key: i32) -> i32 {
         if let Some((value, node)) = self.h_map.get(&key) {
-            self.usage_list.move_back(Rc::clone(node));
+            self.usage_list.move_back(node);
             return *value;
         }
         return -1;
@@ -183,7 +188,7 @@ impl LRUCache {
     fn put(&mut self, key: i32, value: i32) {
         if let Some((entry, node)) = self.h_map.get_mut(&key) {
             *entry = value;
-            self.usage_list.move_back(Rc::clone(node));
+            self.usage_list.move_back(node);
             return;
         }
         if self.h_map.len() as i32 >= self.capacity {
